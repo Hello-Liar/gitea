@@ -253,7 +253,7 @@ func SyncReleasesWithTags(ctx context.Context, repo *repo_model.Repository, gitR
 				// NOTE: ignored, The NumCommits value is calculated and cached on demand when the UI requires it.
 				NumCommits:    -1,
 				CreatedUnix:   timeutil.TimeStamp(util.IfZero(tag.CommitDate, tag.Tagger.When).Unix()),
-				PublishedUnix: timeutil.TimeStamp(tag.Tagger.When.Unix()),
+				PublishedUnix: timeutil.TimeStamp(util.IfZero(tag.Tagger.When, tag.CommitDate).Unix()),
 				IsTag:         true,
 			}
 			if err := db.Insert(ctx, release); err != nil {
@@ -276,7 +276,7 @@ func SyncReleasesWithTags(ctx context.Context, repo *repo_model.Repository, gitR
 				Update(&repo_model.Release{
 					Sha1:          tag.Object.String(),
 					CreatedUnix:   timeutil.TimeStamp(util.IfZero(tag.CommitDate, tag.Tagger.When).Unix()),
-					PublishedUnix: timeutil.TimeStamp(tag.Tagger.When.Unix()),
+					PublishedUnix: timeutil.TimeStamp(util.IfZero(tag.Tagger.When, tag.CommitDate).Unix()),
 				}); err != nil {
 				return fmt.Errorf("unable to update tag %s for pull-mirror Repo[%d:%s/%s]: %w", tag.Name, repo.ID, repo.OwnerName, repo.Name, err)
 			}
