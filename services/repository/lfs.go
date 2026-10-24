@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	git_model "gitea.dev/models/git"
@@ -50,7 +51,7 @@ func GarbageCollectLFSMetaObjects(ctx context.Context, opts GarbageCollectLFSMet
 		}
 
 		repoOpts := opts
-		if newMinimum := int64(float64(count) * opts.ProportionToCheckPerRepo); newMinimum > opts.NumberToCheckPerRepo && opts.NumberToCheckPerRepo != 0 {
+		if newMinimum := int64(math.Ceil(float64(count) * opts.ProportionToCheckPerRepo)); newMinimum > opts.NumberToCheckPerRepo && opts.NumberToCheckPerRepo != 0 {
 			repoOpts.NumberToCheckPerRepo = newMinimum
 		}
 		if err := GarbageCollectLFSMetaObjectsForRepo(ctx, repo, repoOpts); err != nil {

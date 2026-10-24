@@ -110,6 +110,7 @@ func TestGarbageCollectLFSMetaObjectsPerRepoLimit(t *testing.T) {
 	}{
 		{name: "Fixed", minimum: 1, remaining: []int64{5, 3}},
 		{name: "Proportional", minimum: 1, proportion: 0.5, remaining: []int64{3, 2}},
+		{name: "Fractional", minimum: 1, proportion: 0.6, remaining: []int64{2, 1}},
 		{name: "Unlimited", proportion: 0.5, remaining: []int64{0, 0}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
