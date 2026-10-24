@@ -360,7 +360,7 @@ func pushUpdateAddTags(ctx context.Context, repo *repo_model.Repository, gitRepo
 
 		createdUnix := timeutil.TimeStamp(commit.Committer.When.Unix()) // tagged whenever, but dated by its commit
 		publishedUnix := createdUnix
-		if tag.Tagger != nil {
+		if tag.Tagger != nil && !tag.Tagger.When.IsZero() {
 			publishedUnix = timeutil.TimeStamp(tag.Tagger.When.Unix())
 		}
 
