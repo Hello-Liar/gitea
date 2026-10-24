@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	auth_model "gitea.dev/models/auth"
@@ -15,9 +16,13 @@ import (
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
+	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
+	repo_module "gitea.dev/modules/repository"
 	api "gitea.dev/modules/structs"
+	"gitea.dev/modules/timeutil"
 	"gitea.dev/services/release"
+	repo_service "gitea.dev/services/repository"
 	"gitea.dev/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -169,4 +174,39 @@ func TestRepushTag(t *testing.T) {
 		respRelease = DecodeJSON(t, resp, &api.Release{})
 		assert.False(t, respRelease.IsDraft)
 	})
+}
+
+func TestTagWithoutTaggerDate(t *testing.T) {
+	for _, sync := range []bool{false, true} {
+		t.Run(fmt.Sprintf("MirrorSync=%t", sync), func(t *testing.T) {
+			defer tests.PrepareTestEnv(t)()
+			repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 57})
+			owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
+			gitRepo, err := git.OpenRepository(t.Context(), repo)
+			require.NoError(t, err)
+			defer gitRepo.Close()
+			commit, err := gitRepo.GetBranchCommit(t.Context(), repo.DefaultBranch)
+			require.NoError(t, err)
+			parent, err := commit.Parent(t.Context(), gitRepo, 0)
+			require.NoError(t, err)
+			const tagName = "without-tagger"
+			for _, target := range []*git.Commit{commit, parent} {
+				data := fmt.Sprintf("object %s\ntype commit\ntag %s\n\nLegacy tag\n", target.ID.String(), tagName)
+				tagID, _, runErr := gitcmd.NewCommand("hash-object", "--literally", "-t", "tag", "-w", "--stdin").WithRepo(gitRepo).WithStdinBytes([]byte(data)).RunStdString(t.Context())
+				require.NoError(t, runErr)
+				err = gitcmd.NewCommand("update-ref").AddDynamicArguments("refs/tags/"+tagName, strings.TrimSpace(tagID)).WithRepo(gitRepo).Run(t.Context())
+				require.NoError(t, err)
+				if sync {
+					_, err = repo_module.SyncReleasesWithTags(t.Context(), repo, gitRepo)
+				} else {
+					err = repo_service.PushUpdateAddDeleteTags(t.Context(), repo, gitRepo, owner, []string{tagName}, nil)
+				}
+				require.NoError(t, err)
+				tagRelease := unittest.AssertExistsAndLoadBean(t, &repo_model.Release{RepoID: repo.ID, TagName: tagName})
+				expectedDate := timeutil.TimeStamp(target.Committer.When.Unix())
+				assert.Equal(t, expectedDate, tagRelease.CreatedUnix)
+				assert.Equal(t, expectedDate, tagRelease.PublishedUnix)
+			}
+		})
+	}
 }
