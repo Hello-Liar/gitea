@@ -5,6 +5,7 @@ package repository_test
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	repo_service "gitea.dev/services/repository"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGarbageCollectLFSMetaObjects(t *testing.T) {
@@ -97,4 +99,41 @@ func storeObjectInRepo(t *testing.T, repositoryID int64, content *[]byte) string
 		assert.NoError(t, err)
 	}
 	return pointer.Oid
+}
+
+func TestGarbageCollectLFSMetaObjectsPerRepoLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		minimum    int64
+		proportion float64
+		remaining  []int64
+	}{
+		{name: "Fixed", minimum: 1, remaining: []int64{5, 3}},
+		{name: "Proportional", minimum: 1, proportion: 0.5, remaining: []int64{3, 2}},
+		{name: "Unlimited", proportion: 0.5, remaining: []int64{0, 0}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			unittest.PrepareTestEnv(t)
+			defer test.MockVariableValue(&setting.LFS.StartServer, true)()
+			require.NoError(t, storage.Init())
+			for i, repoID := range []int64{1, 3} {
+				for object := range 6 - 2*i {
+					content := fmt.Appendf(nil, "gc-limit-%d-%d", repoID, object)
+					storeObjectInRepo(t, repoID, &content)
+				}
+			}
+			require.NoError(t, repo_service.GarbageCollectLFSMetaObjects(t.Context(), repo_service.GarbageCollectLFSMetaObjectsOptions{
+				AutoFix:                  true,
+				OlderThan:                time.Now().Add(time.Hour),
+				UpdatedLessRecentlyThan:  time.Now().Add(time.Hour),
+				NumberToCheckPerRepo:     tc.minimum,
+				ProportionToCheckPerRepo: tc.proportion,
+			}))
+			for i, repoID := range []int64{1, 3} {
+				count, err := git_model.CountLFSMetaObjects(t.Context(), repoID)
+				require.NoError(t, err)
+				assert.Equal(t, tc.remaining[i], count, "repo %d", repoID)
+			}
+		})
+	}
 }

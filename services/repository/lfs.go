@@ -49,10 +49,11 @@ func GarbageCollectLFSMetaObjects(ctx context.Context, opts GarbageCollectLFSMet
 			return err
 		}
 
+		repoOpts := opts
 		if newMinimum := int64(float64(count) * opts.ProportionToCheckPerRepo); newMinimum > opts.NumberToCheckPerRepo && opts.NumberToCheckPerRepo != 0 {
-			opts.NumberToCheckPerRepo = newMinimum
+			repoOpts.NumberToCheckPerRepo = newMinimum
 		}
-		if err := GarbageCollectLFSMetaObjectsForRepo(ctx, repo, opts); err != nil {
+		if err := GarbageCollectLFSMetaObjectsForRepo(ctx, repo, repoOpts); err != nil {
 			log.Error("Unable to garbage collect LFS meta objects in %-v: %v", repo, err)
 		}
 		return nil
@@ -85,7 +86,7 @@ func GarbageCollectLFSMetaObjectsForRepo(ctx context.Context, repo *repo_model.R
 	objectFormat := git.ObjectFormatFromName(repo.ObjectFormatName)
 
 	err = git_model.IterateLFSMetaObjectsForRepo(ctx, repo.ID, func(ctx context.Context, metaObject *git_model.LFSMetaObject, count int64) error {
-		if opts.NumberToCheckPerRepo > 0 && total > opts.NumberToCheckPerRepo {
+		if opts.NumberToCheckPerRepo > 0 && total >= opts.NumberToCheckPerRepo {
 			return errStop
 		}
 		total++
